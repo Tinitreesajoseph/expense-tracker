@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Expense Tracker</h1>
+        
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Total Income</h3>
+                <p class="text-2xl text-green-600">${{ "%.2f"|format(report.total_income) }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Total Expenses</h3>
+                <p class="text-2xl text-red-600">${{ "%.2f"|format(report.total_expenses) }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Balance</h3>
+                <p class="text-2xl {{ 'text-green-600' if report.total_income > report.total_expenses else 'text-red-600' }}">
+                    ${{ "%.2f"|format(report.total_income - report.total_expenses) }}
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- Expense Distribution Chart -->
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                    <i class="fas fa-chart-pie mr-2 text-indigo-500"></i>
+                    Expense Distribution
+                </h3>
+                <canvas id="expenseChart"></canvas>
+            </div>
+            
+            <!-- Income vs Expenses Chart -->
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                    <i class="fas fa-chart-bar mr-2 text-indigo-500"></i>
+                    Income vs Expenses
+                </h3>
+                <canvas id="balanceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Add Transaction Form -->
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-semibold mb-4">Add Transaction</h2>
+            <form action="{{ url_for('add_transaction') }}" method="POST">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Date</label>
+                        <input type="date" name="date" required class="w-full p-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Type</label>
+                        <select name="type" required class="w-full p-2 border rounded">
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Category</label>
+                        <select name="category" required class="w-full p-2 border rounded">
+                            {% for category in categories %}
+                            <option value="{{ category }}">{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Amount</label>
+                        <input type="number" name="amount" step="0.01" min="0" required 
+                               class="w-full p-2 border rounded">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium mb-1">Description</label>
+                        <textarea name="description" class="w-full p-2 border rounded"></textarea>
+                    </div>
+                </div>
+                <button type="submit" 
+                        class="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                    Add Transaction
+                </button>
+            </form>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Recent Transactions</h2>
+            <div class="space-y-4">
+                {% for transaction in recent_transactions|reverse %}
+                <div class="flex justify-between items-center p-4 bg-gray-50 rounded">
+                    <div>
+                        <div class="font-medium">{{ transaction.category }}</div>
+                        <div class="text-sm text-gray-500">{{ transaction.date }}</div>
+                        <div class="text-sm text-gray-500">{{ transaction.description }}</div>
+                    </div>
+                    <div class="font-bold {{ 'text-green-600' if transaction.type == 'income' else 'text-red-600' }}">
+                        {{ '+' if transaction.type == 'income' else '-' }}${{ "%.2f"|format(transaction.amount) }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get chart data from data attribute
+        const chartCanvas = document.getElementById('expenseChart');
+        const reportData = JSON.parse(chartCanvas.dataset.chartData);
+
+        // Expense Distribution Chart
+        const expenseCtx = chartCanvas.getContext('2d');
+        new Chart(expenseCtx, {
+            type: 'pie',
+            data: {
+                labels: Object.keys(reportData.categories),
+                datasets: [{
+                    data: Object.values(reportData.categories),
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                        '#9966FF', '#FF9F40', '#FF99CC', '#99FF99'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Income vs Expenses Chart
+        const balanceCtx = document.getElementById('balanceChart').getContext('2d');
+        new Chart(balanceCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Current Month'],
+                datasets: [{
+                    label: 'Income',
+                    data: [reportData.total_income],
+                    backgroundColor: '#4BC0C0'
+                }, {
+                    label: 'Expenses',
+                    data: [reportData.total_expenses],
+                    backgroundColor: '#FF6384'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
